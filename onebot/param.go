@@ -140,9 +140,10 @@ type Live struct {
 }
 
 type DownloadRequest struct {
-	FileID string `json:"file_id"`
-	Media  []byte `json:"media"`
-	CDNURL string `json:"cdn_url"`
+	FileID         string `json:"file_id"`
+	Media          []byte `json:"media"`
+	CDNURL         string `json:"cdn_url"`
+	LastAppendTime int64  `json:"last_append_time"`
 }
 
 type ScriptMessage struct {

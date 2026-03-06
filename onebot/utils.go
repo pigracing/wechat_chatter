@@ -187,16 +187,24 @@ func HandleMsg(jsonData []byte) ([]byte, error) {
 			
 			// 如果有图片等待图片下载完成再处理
 			if len(msg.Data.Media) == 0 {
-				if downloadMsgInter, ok := userID2FileMsgMap.Load(fileMsg.Image.ThumbURL); ok {
-					downloadReq := downloadMsgInter.(*DownloadRequest)
-					aesKey, _ := hex.DecodeString(fileMsg.Image.ThumbAesKey)
-					path, err := GetImagePath(downloadReq.Media, aesKey)
-					if err != nil {
-						Error("获取图片路径失败", "err", err)
-						return nil, err
+				for i := 0; i < 3; i++ {
+					if downloadMsgInter, ok := userID2FileMsgMap.Load(fileMsg.Image.ThumbURL); ok {
+						downloadReq := downloadMsgInter.(*DownloadRequest)
+						// 进行重试，最后一次进行兜底
+						if time.Now().UnixMilli()-downloadReq.LastAppendTime < 500 && i < 2 {
+							Info("等待图片下载完成", "times", i, "url", fileMsg.Image.ThumbURL[:20])
+							time.Sleep(2 * time.Second)
+							continue
+						}
+						aesKey, _ := hex.DecodeString(fileMsg.Image.AesKey)
+						path, err := GetImagePath(downloadReq.Media, aesKey)
+						if err != nil {
+							Error("获取图片路径失败", "err", err)
+							return nil, err
+						}
+						msg.Data.URL = "file://" + path
+						userID2FileMsgMap.Delete(fileMsg.Image.ThumbURL)
 					}
-					msg.Data.URL = "file://" + path
-					userID2FileMsgMap.Delete(fileMsg.Image.ThumbURL)
 				}
 			}
 		}

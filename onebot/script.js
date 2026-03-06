@@ -285,6 +285,7 @@ var uploadGetCallbackWrapperFuncAddr = baseAddr.add({{.uploadGetCallbackWrapperF
 var uploadOnCompleteAddr = baseAddr.add({{.uploadOnCompleteAddr}});
 var uploadOnCompleteFuncAddr = baseAddr.add({{.uploadOnCompleteFuncAddr}});
 var downloadImagAddr = baseAddr.add({{.downloadImagAddr}});
+var hdPicDownloadAddr = baseAddr.add(0x494652C)
 
 var uploadImageX1;
 var imgCgiAddr = ptr(0);
@@ -1211,11 +1212,25 @@ function setReceiver() {
         },
     });
 
+    Interceptor.attach(hdPicDownloadAddr, {
+        onEnter: function (args) {
+            var fileIDAddr = this.context.x1.add(0x40).readPointer();
+            var fileId = fileIDAddr?.readUtf8String();
+            if (!fileId.endsWith("_1")) {
+                return
+            }
+
+            console.log(" [+] download file: ", fileId);
+            this.context.x1.add(0x148).writeByteArray([0xa0, 0x86, 0x01, 0x00]);
+            this.context.x1.add(0xA0).writeU32(0x02);
+        }
+    });
+
     Interceptor.attach(downloadImagAddr, { // 建议使用函数起始地址或你计算出的偏移地址
         onEnter: function (args) {
             var dataPtr = this.context.x1;
             var dataLen = this.context.x2.toInt32();
-            var fileId = this.context.sp.add(0x30).readPointer().readUtf8String();
+            var fileId = this.context.x19.add(0x2E0).readPointer().readUtf8String();
             var cdnUrl = this.context.x19.add(0x2F8).readPointer().readUtf8String();
 
             if (dataLen > 0) {

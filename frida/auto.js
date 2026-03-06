@@ -1,28 +1,22 @@
 
-function scanPatterns(patterns) {
+function scanPatterns() {
     var module = Process.getModuleByName("WeChat");
     if (!module) {
         console.error("[!] 找不到 WeChat 模块基址，请检查进程名。");
     }
 
-    patterns.forEach((item, index) => {
+    myPatterns.forEach((item, index) => {
         const { name, pattern } = item;
 
-        // 2. 使用 Memory.scan 进行异步扫描
         Memory.scan(module.base, module.size, pattern, {
             onMatch: function(address, size) {
                 // 计算相对偏移 (RVA)
                 const offset = address.sub(module.base);
-                console.log(`[!] 找到特征 [${name}], 绝对地址: ${address} 相对偏移: ${offset}`);
-
-                // 如果你只想找第一个匹配项，可以在这里 return 'stop';
+                console.log(`"${name}": "${offset}", 绝对地址: ${address}`);
             },
             onError: function(reason) {
                 console.error(`[-] 扫描 [${name}] 时出错: ${reason}`);
             },
-            onComplete: function() {
-                // 扫描完成的回调
-            }
         });
     });
 }
@@ -31,7 +25,7 @@ function scanPatterns(patterns) {
 // 特征码数组：? 代表通配符，空格可选
 const myPatterns = [
     {
-        name: "uploadOnCompleteAddr",
+        name: "CndOnCompleteAddr",
         pattern: "08 19 40 F9 E1 03 14 AA E2 03 15 AA 00 01 3F D6"
     },
     {
@@ -56,9 +50,9 @@ const myPatterns = [
     },
     {
         name: "buf2RespAddr",
-        pattern: "3C 00 80 52  E0 C3 00 91"
-    }
+        pattern: "3C 00 80 52 E0 C3 00 91"
+    },
 ];
 
 // 执行扫描
-scanPatterns(myPatterns);
+scanPatterns();

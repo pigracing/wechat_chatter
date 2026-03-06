@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 )
 
 func Download(rawMsg []byte) error {
@@ -12,11 +13,13 @@ func Download(rawMsg []byte) error {
 		return err
 	}
 	
-	Info("下载文件", "file_id", downloadReq.FileID, "media_len", len(downloadReq.Media), "cdn_url", downloadReq.CDNURL[:10])
+	Info("下载文件", "file_id", downloadReq.FileID, "media_len", len(downloadReq.Media), "cdn_url", downloadReq.CDNURL[:20])
 	if downloadReqInter, ok := userID2FileMsgMap.Load(downloadReq.CDNURL); ok {
 		beforeDownloadReq := downloadReqInter.(*DownloadRequest)
 		beforeDownloadReq.Media = append(beforeDownloadReq.Media, downloadReq.Media...)
+		beforeDownloadReq.LastAppendTime = time.Now().UnixMilli()
 	} else {
+		downloadReq.LastAppendTime = time.Now().UnixMilli()
 		userID2FileMsgMap.Store(downloadReq.CDNURL, downloadReq)
 	}
 	
