@@ -151,7 +151,7 @@ func SendWS(req *WSParams) error {
 					}
 				}
 				
-			} else if v.Type == "image" {
+			} else if v.Type == "image" || v.Type == "video" {
 				msgChan <- &SendMsg{
 					UserId:  req.UserID,
 					GroupID: req.GroupID,
@@ -160,7 +160,6 @@ func SendWS(req *WSParams) error {
 				}
 			}
 		}
-		
 	}
 	
 	if sendContent != "" {

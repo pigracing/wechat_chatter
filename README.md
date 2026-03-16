@@ -4,14 +4,16 @@
 我hook的是微信三端最底层的发消息能力，这块代码是开源的，感兴趣google tencent/mars    
 怎么使用,如果你的mac已经关闭了SIP
 ```
-frida -f /Applications/WeChat.app/Contents/MacOS/WeChat -l frida/succ.js
+# 只支持最新的微信版本，历史版本看release，并且release不再提供buf fix
+frida -f /Applications/WeChat.app/Contents/MacOS/WeChat -l frida/text.js
 triggerSendTextMessage(0x20000095, "wxid_xxxx", "hi")
 ```
 
 没有关闭SIP，查看文件 https://github.com/yincongcyincong/weixin-macos/blob/main/frida-gadget/readme.md    
 把每一步都执行完成，然后启动微信    
 ```
-frida -H 127.0.0.1:27042 -n Gadget -l ./frida/succ.js
+# 只支持最新的微信版本，历史版本看release，并且release不再提供buf fix
+frida -H 127.0.0.1:27042 -n Gadget -l ./frida/text.js
 triggerSendTextMessage(0x20000095, "wxid_xxxx", "hi")
 ```
 

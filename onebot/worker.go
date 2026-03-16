@@ -62,10 +62,22 @@ func SendWechatMsg(m *SendMsg) {
 		}
 		
 		result := fridaScript.ExportsCall("triggerUploadImg", targetId, md5Str, targetPath)
-		Info("📩 上传图片任务执行结果n", "result", result, "target_id", targetId, "md5", md5Str, "path", targetPath)
+		Info("📩 上传图片任务执行结果", "result", result, "target_id", targetId, "md5", md5Str, "path", targetPath)
 	case "send_image":
 		result := fridaScript.ExportsCall("triggerSendImgMessage", currTaskId, myWechatId, targetId)
 		Info("📩 发送图片任务执行结果", "result", result, "task_id", currTaskId, "wechat_id", myWechatId, "target_id", targetId)
+	case "video":
+		targetPath, md5Str, err := SaveBase64Image(m.Content)
+		if err != nil {
+			Error("保存图片失败", "err", err)
+			return
+		}
+		
+		result := fridaScript.ExportsCall("triggerUploadVideo", targetId, md5Str, targetPath)
+		Info("📩 上传视频任务执行结果", "result", result, "target_id", targetId, "md5", md5Str, "path", targetPath)
+	case "send_video":
+		result := fridaScript.ExportsCall("triggerSendVideoMessage", currTaskId, myWechatId, targetId)
+		Info("📩 发送视频任务执行结果", "result", result, "task_id", currTaskId, "wechat_id", myWechatId, "target_id", targetId)
 	case "download":
 		result := fridaScript.ExportsCall("triggerDownload", targetId, m.FIleCdnUrl, m.AesKey, m.FilePath, m.FileType)
 		Info("📩 下载图片任务执行结果", "result", result, "task_id", currTaskId, "wechat_id", myWechatId, "target_id", targetId)

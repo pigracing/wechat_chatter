@@ -185,9 +185,22 @@ func loadJs() {
 							if selfId, ok := pMap["self_id"]; ok && myWechatId == "" {
 								myWechatId = selfId.(string)
 							}
-						case "upload_finish":
+						case "upload_image_finish":
 							m := &SendMsg{
 								Type: "send_image",
+							}
+							if targetIdInter, ok := pMap["target_id"]; ok {
+								targetIdStr := targetIdInter.(string)
+								if strings.Contains(targetIdStr, "wxid_") {
+									m.UserId = targetIdStr
+								} else {
+									m.GroupID = targetIdStr
+								}
+							}
+							msgChan <- m
+						case "upload_video_finish":
+							m := &SendMsg{
+								Type: "send_video",
 							}
 							if targetIdInter, ok := pMap["target_id"]; ok {
 								targetIdStr := targetIdInter.(string)

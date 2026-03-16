@@ -282,6 +282,7 @@ var insertMsgAddr = ptr(0);
 var sendMsgType = "";
 var buf2RespAddr = baseAddr.add({{.buf2RespAddr}});
 
+// 图片消息全局变量
 var imageCallbackFuncAddr = baseAddr.add({{.imageCallbackFuncAddr}});
 var imgProtobufAddr = imageCallbackFuncAddr.add(0x54);
 var patchImgProtobufFunc1 = imageCallbackFuncAddr.add(0x10);
@@ -291,9 +292,21 @@ var patchImgProtobufFunc2Byte;
 var imgProtobufDeleteAddr = imageCallbackFuncAddr.add(0x6c);
 var imgProtobufDeleteAddrByte;
 
+// 视频消息全局变量
+var videoCallbackFuncAddr = baseAddr.add(0x24C76C8);
+var videoProtobufAddr = videoCallbackFuncAddr.add(0x54);
+var patchVideoProtobufFunc1 = videoCallbackFuncAddr.add(0x10);
+var patchVideoProtobufFunc1Byte;
+var patchVideoProtobufFunc2 = videoCallbackFuncAddr.add(0x30);
+var patchVideoProtobufFunc2Byte;
+var videoProtobufDeleteAddr = videoCallbackFuncAddr.add(0x6c);
+var videoProtobufDeleteAddrByte;
+
 var uploadImageAddr = baseAddr.add({{.uploadImageAddr}});
 var CndOnCompleteAddr = baseAddr.add({{.CndOnCompleteAddr}});
 var imgMessageCallbackFunc1 = baseAddr.add({{.imgMessageCallbackFunc1}});
+var videoMessageCallbackFunc1 = baseAddr.add(0x8793B78);
+
 var uploadGetCallbackWrapperAddr = baseAddr.add({{.uploadGetCallbackWrapperAddr}});
 var uploadGetCallbackWrapperFuncAddr = baseAddr.add({{.uploadGetCallbackWrapperFuncAddr}});
 var uploadOnCompleteAddr = baseAddr.add({{.uploadOnCompleteAddr}});
@@ -324,9 +337,18 @@ var uploadAesKeyAddr = ptr(0)
 var ImagePathAddr1 = ptr(0)
 var uploadCallback = ptr(0)
 
-var globalImageCdnKey = "";
-var globalAesKey1 = "";
+var videoCgiAddr = ptr(0);
+var sendVideoMessageAddr = ptr(0);
+var videoMessageAddr = ptr(0);
+var videoProtoX1PayloadAddr = ptr(0);
+var uploadVideoX1 = ptr(0);
+var videoIdAddr = ptr(0);
+var videoPathAddr1 = ptr(0)
+
+var globalCdnKey = "";
+var globalAesKey = "";
 var globalMd5Key = "";
+var videoIdentity = "";
 
 // 发送消息的全局变量
 var taskIdGlobal = 0x20000090 // 最好比较大，不和原始的微信消息重复
@@ -336,7 +358,7 @@ var senderGlobal = "wxid_"
 var lastSendTime = 0;
 var atUserGlobal = "";
 
-const imageCp = generateBytes(16) // m30c4674f5a0b9d
+const fileCp = generateBytes(16)
 
 // -------------------------全局变量分区-------------------------
 
@@ -514,7 +536,7 @@ function triggerSendTextMessage(taskId, receiver, content, atUser) {
     triggerX1Payload.add(0x190).writePointer(triggerX1Payload.add(0x198));
     sendMsgType = "text"
 
-    // console.log("finished init payload")
+    console.log("finished init text payload")
     const MMStartTask = new NativeFunction(sendFuncAddr, 'int64', ['pointer', 'pointer']);
 
     // 5. 调用函数
@@ -628,7 +650,7 @@ function attachReq2buf() {
             // 3. 获取 X24 寄存器的值
             const x24_base = this.context.x24;
             insertMsgAddr = x24_base.add(0x60);
-            console.log("[+] 当前 Req2Buf X24 基址: " + x24_base);
+            console.log("[+] 当前 Req2Buf X24 基址: " + x24_base + " sendMsgType:" + sendMsgType);
 
             if (sendMsgType === "text") {
                 insertMsgAddr.writePointer(sendTextMessageAddr);
@@ -637,6 +659,10 @@ function attachReq2buf() {
             } else if (sendMsgType === "img") {
                 insertMsgAddr.writePointer(sendImgMessageAddr);
                 console.log("[+] 发送图片消息成功! Req2Buf 已将 X24+0x60 指向新地址: " + sendImgMessageAddr +
+                    "[+] Req2Buf 写入后内存预览: " + insertMsgAddr);
+            } else if (sendMsgType === "video") {
+                insertMsgAddr.writePointer(sendVideoMessageAddr);
+                console.log("[+] 发送视频消息成功! Req2Buf 已将 X24+0x60 指向新地址: " + sendVideoMessageAddr +
                     "[+] Req2Buf 写入后内存预览: " + insertMsgAddr);
             }
         }
@@ -671,6 +697,8 @@ setImmediate(attachReq2buf);
 
 // 初始化进行内存的分配
 function setupSendImgMessageDynamic() {
+    console.log("[+] Starting setupSendImgMessageDynamic Dynamic Message Patching...");
+
     // 1. 动态分配内存块（按需分配大小）
     // 分配原则：字符串给 64-128 字节，结构体按实际大小分配
     imgCgiAddr = Memory.alloc(128);
@@ -684,11 +712,11 @@ function setupSendImgMessageDynamic() {
     uploadAesKeyAddr = Memory.alloc(256);
     ImagePathAddr1 = Memory.alloc(256);
     uploadImageX1 = Memory.alloc(1024);
+    imgProtoX1PayloadAddr = Memory.alloc(1024);
 
-    // A. 写入字符串内容
+    // 图片数据写入
     patchString(imgCgiAddr, "/cgi-bin/micromsg-bin/uploadmsgimg");
 
-    // B. 构建 SendMessage 结构体 (X24 基址位置)
     sendImgMessageAddr.add(0x00).writeU64(0);
     sendImgMessageAddr.add(0x08).writeU64(0);
     sendImgMessageAddr.add(0x10).writeU64(0);
@@ -696,14 +724,6 @@ function setupSendImgMessageDynamic() {
     sendImgMessageAddr.add(0x20).writeU32(taskIdGlobal);
     sendImgMessageAddr.add(0x28).writePointer(imgMessageAddr);
 
-    // console.log(" [+] sendImgMessageAddr Object: ", hexdump(sendImgMessageAddr, {
-    //     offset: 0,
-    //     length: 48,
-    //     header: true,
-    //     ansi: true
-    // }));
-
-    // C. 构建 Message 结构体
     imgMessageAddr.add(0x00).writePointer(imgMessageCallbackFunc1);
     imgMessageAddr.add(0x08).writeU32(taskIdGlobal);
     imgMessageAddr.add(0x0c).writeU32(0x6e);
@@ -713,11 +733,40 @@ function setupSendImgMessageDynamic() {
     imgMessageAddr.add(0x28).writeU64(uint64("0x8000000000000030"));
     imgMessageAddr.add(0x30).writeU64(uint64("0x0000000001010100"));
 
-    console.log(" [+] Dynamic Memory Setup Complete. - Message Object: " + imgMessageAddr);
-
     patchImgProtobufFunc1Byte = patchImgProtobufFunc1.readByteArray(4);
     patchImgProtobufFunc2Byte = patchImgProtobufFunc2.readByteArray(4);
     imgProtobufDeleteAddrByte = imgProtobufDeleteAddr.readByteArray(4);
+
+    // 视频数据写入
+    videoCgiAddr = Memory.alloc(128);
+    sendVideoMessageAddr = Memory.alloc(256);
+    videoMessageAddr = Memory.alloc(256);
+    videoIdAddr = Memory.alloc(256);
+    videoPathAddr1 = Memory.alloc(256);
+    uploadVideoX1 = Memory.alloc(1024);
+    videoProtoX1PayloadAddr = Memory.alloc(2048);
+
+    patchString(videoCgiAddr, "/cgi-bin/micromsg-bin/uploadvideo");
+
+    sendVideoMessageAddr.add(0x00).writeU64(0);
+    sendVideoMessageAddr.add(0x08).writeU64(0);
+    sendVideoMessageAddr.add(0x10).writeU64(0);
+    sendVideoMessageAddr.add(0x18).writeU64(1);
+    sendVideoMessageAddr.add(0x20).writeU32(taskIdGlobal);
+    sendVideoMessageAddr.add(0x28).writePointer(videoMessageAddr);
+
+    videoMessageAddr.add(0x00).writePointer(videoMessageCallbackFunc1);
+    videoMessageAddr.add(0x08).writeU32(taskIdGlobal);
+    videoMessageAddr.add(0x0c).writeU32(0x6e);
+    videoMessageAddr.add(0x10).writeU64(0x3);
+    videoMessageAddr.add(0x18).writePointer(videoCgiAddr);
+    videoMessageAddr.add(0x20).writeU64(0x21);
+    videoMessageAddr.add(0x28).writeU64(uint64("0x8000000000000030"));
+    videoMessageAddr.add(0x30).writeU64(uint64("0x0000000001010100"));
+
+    patchVideoProtobufFunc1Byte = patchVideoProtobufFunc1.readByteArray(4);
+    patchVideoProtobufFunc2Byte = patchVideoProtobufFunc2.readByteArray(4);
+    videoProtobufDeleteAddrByte = videoProtobufDeleteAddr.readByteArray(4);
 }
 
 setImmediate(setupSendImgMessageDynamic);
@@ -772,6 +821,55 @@ function patchImgProtoBuf() {
 
 setImmediate(patchImgProtoBuf);
 
+function patchVideoProtoBuf() {
+    Interceptor.attach(videoCallbackFuncAddr, {
+        onEnter: function (args) {
+            var firstValue = this.context.sp.add(0x10).readU32();
+            console.log("[+] 捕获到 ImageCallbackFunc 调用，firstValue：", firstValue, "X1地址：", taskIdGlobal);
+            if (firstValue === taskIdGlobal) {
+                if (patchVideoProtobufFunc1.readU32() !== 3573751839) {
+                    Memory.patchCode(patchVideoProtobufFunc1, 4, code => {
+                        const cw = new Arm64Writer(code, {pc: patchVideoProtobufFunc1});
+                        cw.putNop();
+                        cw.flush();
+                    });
+                    Memory.patchCode(patchVideoProtobufFunc2, 4, code => {
+                        const cw = new Arm64Writer(code, {pc: patchVideoProtobufFunc2});
+                        cw.putNop();
+                        cw.flush();
+                    });
+                    Memory.patchCode(videoProtobufDeleteAddr, 4, code => {
+                        const cw = new Arm64Writer(code, {pc: videoProtobufDeleteAddr});
+                        cw.putNop();
+                        cw.flush();
+                    });
+                }
+            } else {
+                if (patchVideoProtobufFunc1.readU32() === 3573751839) {
+                    Memory.patchCode(patchVideoProtobufFunc1, 4, code => {
+                        const cw = new Arm64Writer(code, {pc: patchVideoProtobufFunc1});
+                        cw.putBytes(new Uint8Array(patchVideoProtobufFunc1Byte));
+                        cw.flush();
+                    });
+                    Memory.patchCode(patchVideoProtobufFunc2, 4, code => {
+                        const cw = new Arm64Writer(code, {pc: patchVideoProtobufFunc2});
+                        cw.putBytes(new Uint8Array(patchVideoProtobufFunc2Byte));
+                        cw.flush();
+                    });
+                    Memory.patchCode(videoProtobufDeleteAddr, 4, code => {
+                        const cw = new Arm64Writer(code, {pc: videoProtobufDeleteAddr});
+                        cw.putBytes(new Uint8Array(videoProtobufDeleteAddrByte));
+                        cw.flush();
+                    });
+                }
+
+            }
+        }
+    })
+}
+
+setImmediate(patchVideoProtoBuf);
+
 function triggerSendImgMessage(taskId, sender, receiver) {
     console.log("[+] Manual Trigger Started...");
     if (!taskId || !receiver || !sender) {
@@ -788,8 +886,6 @@ function triggerSendImgMessage(taskId, sender, receiver) {
 
     imgMessageAddr.add(0x08).writeU32(taskIdGlobal);
     sendImgMessageAddr.add(0x20).writeU32(taskIdGlobal);
-
-    // console.log("start init payload")
 
     const payloadData = [
         0x6e, 0x00, 0x00, 0x00,                         // 0x00
@@ -852,7 +948,99 @@ function triggerSendImgMessage(taskId, sender, receiver) {
     triggerX1Payload.add(0x190).writePointer(triggerX1Payload.add(0x198));
     sendMsgType = "img"
 
-    console.log("finished init payload")
+    console.log("finished init image payload")
+    const MMStartTask = new NativeFunction(sendFuncAddr, 'int64', ['pointer', 'pointer']);
+
+    // 5. 调用函数
+    try {
+        const result = MMStartTask(triggerX0, triggerX1Payload);
+        console.log(`[+] Execution StartTask ${sendFuncAddr} with args: (${triggerX0}) (${triggerX1Payload})  Success. Return value: ` + result);
+        return "ok";
+    } catch (e) {
+        console.error(`[!] Error trigger StartTask ${sendFuncAddr} with args: (${triggerX0}) (${triggerX1Payload}),   during execution: ` + e);
+        return "fail";
+    }
+}
+
+function triggerSendVideoMessage(taskId, sender, receiver) {
+    console.log("[+] Manual Trigger Started...");
+    if (!taskId || !receiver || !sender) {
+        console.error("[!] taskId or receiver or sender is empty!");
+        return "fail";
+    }
+
+    // 获取当前时间戳 (秒)
+    const timestamp = Math.floor(Date.now() / 1000);
+    lastSendTime = timestamp
+    taskIdGlobal = taskId;
+    receiverGlobal = receiver;
+    senderGlobal = sender;
+
+    videoMessageAddr.add(0x08).writeU32(taskIdGlobal);
+    sendVideoMessageAddr.add(0x20).writeU32(taskIdGlobal);
+
+    const payloadData = [
+        0x6e, 0x00, 0x00, 0x00,                         // 0x00
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x08
+        0x03, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, // 0x10
+        0x40, 0xec, 0x0e, 0x12, 0x01, 0x00, 0x00, 0x00, // 0x18
+        0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x20 cgi的长度
+        0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // 0x28
+        0x00, 0x01, 0x01, 0x01, 0x00, 0xAA, 0xAA, 0xAA, // 0x30
+        0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, // 0x38
+        0x01, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, // 0x40
+        0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xAA, 0xAA, 0xAA, // 0x48
+        0xFF, 0xFF, 0xFF, 0xFF, 0xAA, 0xAA, 0xAA, 0xAA, // 0x50
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x58
+        0x6e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x60
+        0x64, 0x65, 0x66, 0x61, 0x75, 0x6C, 0x74, 0x2D, // 0x68 default-
+        0x6C, 0x6F, 0x6E, 0x67, 0x6C, 0x69, 0x6E, 0x6B, // 0x70 longlink
+        0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x10, // 0x78
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x80
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x88
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x90
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x98
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xA0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xA8
+        0x00, 0x00, 0x00, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, // 0xB0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xB8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xC0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xC8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xD0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xD8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xE0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xE8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xF0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xF8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x100
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x108
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x110
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x118
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x120
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x128
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x130
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x138
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x140
+        0x01, 0x00, 0x00, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, // 0x148
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x150
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x158
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x160
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x168
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x170
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x178
+        0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x180
+        0x00, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, // 0x188
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x190
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x198
+    ];
+    triggerX1Payload.writeU32(taskIdGlobal);
+    triggerX1Payload.add(0x04).writeByteArray(payloadData);
+    triggerX1Payload.add(0x18).writePointer(videoCgiAddr);
+    triggerX1Payload.add(0xb8).writePointer(triggerX1Payload.add(0xc0));
+    triggerX1Payload.add(0x190).writePointer(triggerX1Payload.add(0x198));
+    sendMsgType = "video"
+
+    console.log("finished init video payload")
     const MMStartTask = new NativeFunction(sendFuncAddr, 'int64', ['pointer', 'pointer']);
 
     // 5. 调用函数
@@ -869,9 +1057,6 @@ function triggerSendImgMessage(taskId, sender, receiver) {
 
 // 拦截 Protobuf 编码逻辑，注入自定义 Payload
 function attachProto() {
-    imgProtoX1PayloadAddr = Memory.alloc(1024);
-    console.log("[+] Frida 分配的 Payload 地址: " + imgProtoX1PayloadAddr);
-
     Interceptor.attach(imgProtobufAddr, {
         onEnter: function (args) {
             var currTaskId = this.context.sp.add(0x30).readU32();
@@ -922,25 +1107,25 @@ function attachProto() {
 
             const cdnHeader = [0x58, 0x01, 0x60, 0x02, 0x68, 0x00, 0x7A, 0xB2, 0x01]
             // 3057 开头的cdn key
-            const cdn = stringToHexArray(globalImageCdnKey);
+            const cdn = stringToHexArray(globalCdnKey);
 
             const cdn2Header = [0x82, 0x01, 0xB2, 0x01]
-            const cdn2 = stringToHexArray(globalImageCdnKey)
+            const cdn2 = stringToHexArray(globalCdnKey)
 
             const aesKeyHeader = [0x8A, 0x01, 0x20]
-            const aesKey = stringToHexArray(globalAesKey1)
+            const aesKey = stringToHexArray(globalAesKey)
 
             const randomId5 = [0x90, 0x01, 0x01, 0x98, 0x01, 0xFF, // 0x2C8
                 0x13, 0xA0, 0x01, 0xFF, 0x13]
 
             const cdn3Header = [0xAA, 0x01, 0xB2, 0x01]
-            const cdn3 = stringToHexArray(globalImageCdnKey)
+            const cdn3 = stringToHexArray(globalCdnKey)
 
             const randomId6 = [0xB0, 0x01, 0xF4, 0x0B]
             const randomId7 = [0xB8, 0x01, 0x68]
             const randomId8 = [0xC0, 0x01, 0x3A]
             const aesKey1Header = [0xCA, 0x01, 0x20]
-            const aesKey1 = stringToHexArray(globalAesKey1)
+            const aesKey1 = stringToHexArray(globalAesKey)
             const md5Header = [0xDA, 0x01, 0x20]
             const me5Key = stringToHexArray(globalMd5Key)
 
@@ -951,7 +1136,7 @@ function attachProto() {
                 0xC8, 0x02, 0x00, 0x00 // 0x3E8
             ]
 
-            const finalPayload = type.concat(msgId, cpHeader, imageCp, randomId, sysHeader, sys, msgIdHeader, receiverMsgId,
+            const finalPayload = type.concat(msgId, cpHeader, fileCp, randomId, sysHeader, sys, msgIdHeader, receiverMsgId,
                 senderHeader, sender, receiverHeader, receiver, randomId1, type1, randomId2, randomId3, randomId4, htmlHeader, html,
                 cdnHeader, cdn, cdn2Header, cdn2, aesKeyHeader, aesKey, randomId5, cdn3Header, cdn3, randomId6, randomId7, randomId8,
                 aesKey1Header, aesKey1, md5Header, me5Key, randomId9, left0)
@@ -965,6 +1150,117 @@ function attachProto() {
             // console.log("[+] 寄存器修改完成: X1=" + this.context.x1 + ", X2=" + this.context.x2, hexdump(imgProtoX1PayloadAddr, {
             //     offset: 0,
             //     length: 256,
+            //     header: true,
+            //     ansi: true
+            // }));
+        },
+    });
+
+    Interceptor.attach(videoProtobufAddr, {
+        onEnter: function (args) {
+
+            var currTaskId = this.context.sp.add(0x30).readU32();
+            if (currTaskId !== taskIdGlobal) {
+                console.log(`[+] 拦截到非目标 currTaskId: ${currTaskId} taskIdGlobal: ${taskIdGlobal}`);
+                console.log("[+] 视频寄存器修改完成: X1=" + this.context.x1 + ", X2=" + this.context.x2, hexdump(this.context.x1, {
+                    offset: 0,
+                    length: 1028,
+                    header: true,
+                    ansi: true
+                }));
+                return
+            }
+
+            const type = [0x0A, 0x3f, 0x0A, 0x01, 0x00]
+            const msgId = [0x10].concat(generateRandom5ByteVarint())
+            const cpHeader = [0x1A, 0x10]
+
+            const randomId = [0x20, 0xAF, 0xAC, 0x90, 0x93, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01]
+            const sysHeader = [0x2A, 0x15]
+            // UnifiedPCMac 26 arm64
+            const sys = [0x55, 0x6E, 0x69, 0x66, 0x69, 0x65, 0x64, 0x50, 0x43, 0x4D, 0x61, 0x63, 0x20, 0x32, 0x36, 0x20, 0x61, 0x72, 0x6D, 0x36, 0x34]
+
+            // 注意：这里 sender 和 receiver 互换了
+            const receiverMsgId = stringToHexArray(receiverGlobal).concat([0x5F])
+                .concat(stringToHexArray(Math.floor(Date.now() / 1000).toString()))
+                .concat([0x5F, 0x31, 0x36, 0x30, 0x5F, 0x78, 0x77, 0x65, 0x63, 0x68, 0x61, 0x74, 0x5F, 0x31]);
+
+            // 0x81, 0x01 是 tag，0x12, 0x2b 是长度=43
+            const msgIdHeader = [0x30, 0x76, 0x12, receiverMsgId.length]
+
+            const senderHeader = [0x1A, senderGlobal.length];
+            // sender 和 receiver 互换了，sender 是 wxid_ldftuhe36izg19
+            const sender = stringToHexArray(senderGlobal);
+            const receiverHeader = [0x22, receiverGlobal.length]
+            // receiver 是 wxid_7wd1ece99f7i21
+            const receiver = stringToHexArray(receiverGlobal)
+
+            const randomId1 = [0x28, 0xac, 0x73, 0x30, 0xac, 0x73, 0x3a, 0x04, 0x08, 0x00, 0x12, 0x00]
+            const type1 = [0x40, 0xe8, 0xf2, 0x6f]
+            const randomId2 = [0x48, 0xe8, 0xf2, 0x6f]
+            const randomId3 = [0x52, 0x04, 0x08, 0x00, 0x12, 0x00]
+            const randomId4 = [0x58, 0x0d, 0x60, 0x01, 0x68, 0x02, 0x70, 0x00]
+            const htmlHeader = [0x7a, 0x3c];
+
+            const html = [0x3C, 0x6D, 0x73, 0x67, 0x73, 0x6F, 0x75, 0x72, 0x63, 0x65,
+                0x3E, 0x3C, 0x61, 0x6C, 0x6E, 0x6F, 0x64, 0x65, 0x3E, 0x3C, 0x66, 0x72,
+                0x3E, 0x31, 0x3C, 0x2F, 0x66, 0x72, 0x3E, 0x3C, 0x63, 0x66, 0x3E, 0x33,
+                0x3C, 0x2F, 0x63, 0x66, 0x3E, 0x3C, 0x2F, 0x61, 0x6C, 0x6E, 0x6F, 0x64,
+                0x65, 0x3E, 0x3C, 0x2F, 0x6D, 0x73, 0x67, 0x73, 0x6F, 0x75, 0x72, 0x63,
+                0x65, 0x3E]
+
+            const cdnHeader = [0x82, 0x01, 0xb2, 0x01]
+            // 3057 开头的cdn key
+            const cdn = stringToHexArray(globalCdnKey);
+
+            const aesKeyHeader = [0x8A, 0x01, 0x20]
+            const aesKey = stringToHexArray(globalAesKey)
+
+            const randomId5 = [0x90, 0x01, 0x01, 0x9A, 0x01, 0xB2, 0x01]
+
+            const cdn2 = stringToHexArray(globalCdnKey)
+
+            const randomId6 = [0xA0, 0x01, 0xAC, 0x73, 0xA8, 0x01, 0xE8, 0x02, 0xB0, 0x01, 0xCB, 0x01]
+
+            const aesKey1Header = [0xBA, 0x01, 0x20]
+            const aesKey1 = stringToHexArray(globalAesKey)
+
+            const md5Header = [0xd2, 0x01, 0x20]
+            const md5Key = stringToHexArray(globalMd5Key)
+
+            const md5Header1 = [0xAA, 0x02, 0x20]
+            const md5Key1 = stringToHexArray(videoIdentity)
+
+            const randomId7 = [0xB0, 0x02, 0x00]
+
+            const md5Key2Header = [0x82, 0x03, 0x20]
+            const md5Key2 = stringToHexArray(globalMd5Key)
+
+            const cdn3Header = [0x8A, 0x03, 0xB2, 0x01]
+            const cdn3 = stringToHexArray(globalCdnKey)
+
+            const randomId8 = [0x92, 0x03, 0x20]
+
+            const md5Key3 = stringToHexArray(globalAesKey)
+
+            var left0 = [
+                0x98, 0x03, 0xe8, 0xf2, 0x6f
+            ]
+
+            const finalPayload = type.concat(msgId, cpHeader, fileCp, randomId, sysHeader, sys, msgIdHeader, receiverMsgId,
+                senderHeader, sender, receiverHeader, receiver, randomId1, type1, randomId2, randomId3, randomId4, htmlHeader, html,
+                cdnHeader, cdn, aesKeyHeader, aesKey, randomId5, cdn2, randomId6, aesKey1Header, aesKey1, md5Header, md5Key, md5Header1,
+                md5Key1, randomId7, md5Key2Header, md5Key2, cdn3Header, cdn3, randomId8, md5Key3, left0)
+
+            videoProtoX1PayloadAddr.writeByteArray(finalPayload);
+            console.log("[+] 视频Payload 已写入，长度: " + finalPayload.length);
+
+            this.context.x1 = videoProtoX1PayloadAddr;
+            this.context.x2 = ptr(finalPayload.length);
+
+            // console.log("[+] 视频寄存器修改完成: X1=" + this.context.x1 + ", X2=" + this.context.x2, hexdump(videoProtoX1PayloadAddr, {
+            //     offset: 0,
+            //     length: finalPayload.length,
             //     header: true,
             //     ansi: true
             // }));
@@ -1084,22 +1380,143 @@ function triggerUploadImg(receiver, md5, imagePath) {
     console.log("调用结果: " + result);
 }
 
+function triggerUploadVideo(receiver, md5, videoPath) {
+    const payload = [
+        0x20, 0x05, 0x33, 0x8C, 0x0B, 0x00, 0x00, 0x00, // 函数 10802b8b0 的指针
+        0x00, 0x05, 0x33, 0x8C, 0x0B, 0x00, 0x00, 0x00, // 函数 107fd5908 的指针
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x0B, 0x00, 0x00, 0x00, // 0x40
+        0xD0, 0x72, 0x20, 0x89, 0x0B, 0x00, 0x00, 0x00, // 图片id // 0x48
+        0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x50
+        0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x77, 0x78, 0x69, 0x64, 0x5F, 0x37, 0x77, 0x64, // 发送人 0x68
+        0x31, 0x65, 0x63, 0x65, 0x39, 0x39, 0x66, 0x37,
+        0x69, 0x32, 0x31, 0x00, 0x00, 0x00, 0x00, 0x13, // 发送人id长度
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x88
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0xAA, 0xAA, 0xAA, 0x04, 0x00, 0x00, 0x00, // 0x98
+        0x00, 0x00, 0x00, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, // 0xa0
+        0xA0, 0xBE, 0x2D, 0x8C, 0x0B, 0x00, 0x00, 0x00, // 0xa8
+        0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xb0
+        0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // 0xb8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x55, 0xDB, 0x89, 0x0B, 0x00, 0x00, 0x00, // 0xe0 图片地址 高清 /Users/yincong/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_ldftuhe36izg19_5e7d/temp/04ebaab7e3ea6050e26ff31d89cc121e/2026-01/Img/166_1768214492_hd.jpg
+        0xB2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xe8
+        0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // 0xf0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xf8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x100
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x108
+        0x40, 0x54, 0xDB, 0x89, 0x0B, 0x00, 0x00, 0x00, // 0x110 图片地址 普清 /Users/yincong/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_ldftuhe36izg19_5e7d/temp/04ebaab7e3ea6050e26ff31d89cc121e/2026-01/Img/166_1768214492.jpg
+        0xB2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x118
+        0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // 0x120
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x40, 0x5D, 0xDB, 0x89, 0x0B, 0x00, 0x00, 0x00, // 0x140 图片地址 缩略图 /Users/yincong/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_ldftuhe36izg19_5e7d/temp/04ebaab7e3ea6050e26ff31d89cc121e/2026-01/Img/166_1768214492_thumb.jpg
+        0xB2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x148
+        0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // 0x150
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x158
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x160
+        0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0xE0, 0x03, // 0x168
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x170
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x178
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x180
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,// 0x188
+        0x00, 0xAA, 0xAA, 0xAA, 0x01, 0x00, 0x00, 0x00, // 0x190
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x198
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,// 0x1a0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1a8
+        0x00, 0x00, 0x00, 0x00, 0x0A, 0x0A, 0x0A, 0x0A, // 0x1b0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1b8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1c0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1c8
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1d0
+        0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1d8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1e0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1e8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x1f0
+        0xD0, 0x78, 0x46, 0x8C, 0x0B, 0x00, 0x00, 0x00, // 0x1f8 某个key ecd57e9cf85f2e2087aee8c0fd1e445e
+        0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x200
+        0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // 0x208
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x210
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x218
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x220
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x228
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x230
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x238
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x240
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x248
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,// 0x250
+        0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, // 0x258
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x260
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x268
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x270
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,// 0x278
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,// 0x280
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x288
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x290
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x298
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2a0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2a8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2b0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2b8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2c0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2c8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2d0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2d8
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x2e0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // 0x2e8
+    ]
+
+    patchString(videoIdAddr, receiver + "_" + String(Math.floor(Date.now() / 1000)) + "_" + Math.floor(Math.random() * 1001) + "_1");
+    patchString(md5Addr, md5)
+    patchString(uploadAesKeyAddr, generateAESKey())
+    patchString(videoPathAddr1, videoPath);
+
+    uploadVideoX1.writeByteArray(payload);
+    uploadVideoX1.writePointer(uploadFunc1Addr);
+    uploadVideoX1.add(0x08).writePointer(uploadFunc2Addr);
+    uploadVideoX1.add(0x48).writePointer(videoIdAddr);
+    uploadVideoX1.add(0x68).writeUtf8String(receiver);
+    uploadVideoX1.add(0xa8).writePointer(md5Addr);
+    uploadVideoX1.add(0xe0).writePointer(videoPathAddr1);
+    uploadVideoX1.add(0x110).writePointer(videoPathAddr1);
+    uploadVideoX1.add(0x140).writePointer(videoPathAddr1);
+    uploadVideoX1.add(0x1f8).writePointer(uploadAesKeyAddr);
+
+    const startUploadMedia = new NativeFunction(uploadImageAddr, 'int64', ['pointer', 'pointer']);
+
+    const result = startUploadMedia(uploadGlobalX0, uploadVideoX1);
+    console.log("调用结果: " + result);
+}
+
 function attachUploadMedia() {
     Interceptor.attach(uploadImageAddr.add(0x10), {
         onEnter: function (args) {
             uploadGlobalX0 = this.context.x0;
             const selfId = this.context.x1.add(0x68).readUtf8String();
-            const imagePath = this.context.x1.add(0xe0).readPointer().readUtf8String();
+            const filePath = this.context.x1.add(0xe0).readPointer().readUtf8String();
             send({
                 type: "upload",
                 self_id: selfId,
             })
-            console.log("UploadMedia x0: " + uploadGlobalX0 + " imagePath: " + imagePath + " selfId: " + selfId);
+            console.log("UploadMedia x0: " + uploadGlobalX0 + " filePath: " + filePath + " selfId: " + selfId);
         }
     })
 }
 
 setImmediate(attachUploadMedia);
+
 
 function patchCdnOnComplete() {
     Interceptor.attach(CndOnCompleteAddr, {
@@ -1108,28 +1525,37 @@ function patchCdnOnComplete() {
             try {
                 const x2 = this.context.x2;
                 const currentFileId = x2.add(0x20).readPointer().readUtf8String();
-                const fileId = imageIdAddr.readUtf8String();
-                if (currentFileId !== fileId) {
-                    console.log("[-] CndOnComplete x2: " + x2 + " currentFileId: " + currentFileId + " fileId: " + fileId);
+                const imageFileId = imageIdAddr.readUtf8String();
+                const videoFileId = videoIdAddr.readUtf8String()
+                if (currentFileId !== imageFileId && currentFileId !== videoFileId) {
+                    console.log("[-] CndOnComplete x2: " + x2 + " currentFileId: " + currentFileId +
+                        " imageFileId: " + imageFileId + " videoFileId:" + videoFileId);
                     return
                 }
 
-                globalImageCdnKey = x2.add(0x60).readPointer().readUtf8String();
-                globalAesKey1 = x2.add(0x78).readPointer().readUtf8String();
+                globalCdnKey = x2.add(0x60).readPointer().readUtf8String();
+                globalAesKey = x2.add(0x78).readPointer().readUtf8String();
                 globalMd5Key = x2.add(0x90).readPointer().readUtf8String();
+                videoIdentity = x2.add(0xf0).readPointer().readUtf8String();
                 const targetId = x2.add(0x40).readUtf8String();
-                console.log("X2" + x2 + "[+] globalImageCdnKey: " + globalImageCdnKey + " globalAesKey1: " + globalAesKey1 +
-                    " globalMd5Key: " + globalMd5Key);
+                console.log("X2: " + x2 + "[+] globalCdnKey: " + globalCdnKey + " globalAesKey: " + globalAesKey +
+                    " globalMd5Key: " + globalMd5Key + " videoIdentity:" + videoIdentity);
                 send({
                     type: "finish",
                 })
 
-                if (globalImageCdnKey !== "" && globalImageCdnKey != null && globalAesKey1 !== "" && globalAesKey1 != null &&
+                if (globalCdnKey !== "" && globalCdnKey != null && globalAesKey !== "" && globalAesKey != null &&
                     globalMd5Key !== "" && globalMd5Key != null) {
+                    let t = "upload_image_finish";
+                    if (videoIdentity !== null && videoIdentity !== "") {
+                        t = "upload_video_finish";
+                    }
                     send({
-                        type: "upload_finish",
+                        type: t,
                         target_id: targetId,
                     })
+                } else {
+                    console.error("cdnKey or aesKey or md5key 为空")
                 }
             } catch (e) {
                 console.log("[-] Memory access error at onEnter: " + e);
@@ -1144,30 +1570,32 @@ function attachGetCallbackFromWrapper() {
     Interceptor.attach(uploadGetCallbackWrapperAddr, {
         onEnter: function (args) {
             const tmpFileId = this.context.x1.readPointer().readUtf8String();
-            const fileId = imageIdAddr.readUtf8String();
-            if (tmpFileId !== fileId) {
-                console.log("[+] GetCallbackFromWrapper tmpFileId: " + tmpFileId + " fileId: " + fileId);
+            const imageFileId = imageIdAddr.readUtf8String();
+            const videoFileId = videoIdAddr.readUtf8String()
+            if (tmpFileId !== imageFileId && tmpFileId !== videoFileId) {
+                console.log("[+] GetCallbackFromWrapper tmpFileId: " + tmpFileId + " imageFileId: " + imageFileId + " videoFileId:" + videoFileId);
                 return
             }
 
-            console.log("[+] GetCallbackFromWrapper x8: " + this.context.x8);
             uploadCallback.add(0x10).writePointer(uploadGetCallbackWrapperFuncAddr);
             this.context.x8 = uploadCallback;
+            console.log("[+] GetCallbackFromWrapper x8: " + this.context.x8);
         }
     })
 
     Interceptor.attach(uploadOnCompleteAddr, {
         onEnter: function (args) {
             const tmpFileId = this.context.x1.readPointer().readUtf8String();
-            const fileId = imageIdAddr.readUtf8String();
-            if (tmpFileId !== fileId) {
-                console.log("[+] OnComplete tmpFileId: " + tmpFileId + " fileId: " + fileId);
+            const imageFileId = imageIdAddr.readUtf8String();
+            const videoFileId = videoIdAddr.readUtf8String()
+            if (tmpFileId !== imageFileId && tmpFileId !== videoFileId) {
+                console.log("[+] OnComplete tmpFileId: " + tmpFileId + " imageFileId: " + imageFileId + " videoFileId:" + videoFileId);
                 return
             }
 
-            console.log("[+] OnComplete x8: " + this.context.x8);
             uploadCallback.add(0x30).writePointer(uploadOnCompleteFuncAddr);
             this.context.x8 = uploadCallback;
+            console.log("[+] OnComplete x8: " + this.context.x8);
         }
     })
 }
@@ -1179,6 +1607,8 @@ rpc.exports = {
     triggerUploadImg: triggerUploadImg,
     triggerSendTextMessage: triggerSendTextMessage,
     triggerDownload: triggerDownload,
+    triggerUploadVideo: triggerUploadVideo,
+    triggerSendVideoMessage: triggerSendVideoMessage,
 };
 
 // -------------------------发送图片消息分区-------------------------
@@ -1223,7 +1653,6 @@ function setReceiver() {
 
             if (typeof sender !== "string" || sender === "" || typeof receiver !== "string" || receiver === "" ||
                 typeof content !== "string" || content === "" || typeof msgId !== "string" || msgId === "") {
-                console.log("字段缺失，无法解析 sender:" + sender + " receiver:" + receiver + " content:" + content, " msgId:" + msgId)
                 return;
             }
 

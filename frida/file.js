@@ -154,8 +154,8 @@ var uploadVideoX1 = ptr(0);
 var videoIdAddr = ptr(0);
 var videoPathAddr1 = ptr(0)
 
-var globalImageCdnKey = "";
-var globalAesKey1 = "";
+var globalCdnKey = "";
+var globalAesKey = "";
 var globalMd5Key = "";
 var videoIdentity = ""
 
@@ -167,7 +167,7 @@ var senderGlobal = "wxid_"
 var lastSendTime = 0;
 var atUserGlobal = "";
 
-const imageCp = generateBytes(16) // m30c4674f5a0b9d
+const fileCp = generateBytes(16)
 
 // -------------------------全局变量分区-------------------------
 
@@ -506,7 +506,7 @@ function triggerSendImgMessage(taskId, sender, receiver) {
     triggerX1Payload.add(0x190).writePointer(triggerX1Payload.add(0x198));
     sendMsgType = "img"
 
-    console.log("finished init payload")
+    console.log("finished init image payload")
     const MMStartTask = new NativeFunction(sendFuncAddr, 'int64', ['pointer', 'pointer']);
 
     // 5. 调用函数
@@ -536,8 +536,6 @@ function triggerSendVideoMessage(taskId, sender, receiver) {
 
     videoMessageAddr.add(0x08).writeU32(taskIdGlobal);
     sendVideoMessageAddr.add(0x20).writeU32(taskIdGlobal);
-
-    console.log("start init payload")
 
     const payloadData = [
         0x6e, 0x00, 0x00, 0x00,                         // 0x00
@@ -669,25 +667,25 @@ function attachProto() {
 
             const cdnHeader = [0x58, 0x01, 0x60, 0x02, 0x68, 0x00, 0x7A, 0xB2, 0x01]
             // 3057 开头的cdn key
-            const cdn = stringToHexArray(globalImageCdnKey);
+            const cdn = stringToHexArray(globalCdnKey);
 
             const cdn2Header = [0x82, 0x01, 0xB2, 0x01]
-            const cdn2 = stringToHexArray(globalImageCdnKey)
+            const cdn2 = stringToHexArray(globalCdnKey)
 
             const aesKeyHeader = [0x8A, 0x01, 0x20]
-            const aesKey = stringToHexArray(globalAesKey1)
+            const aesKey = stringToHexArray(globalAesKey)
 
             const randomId5 = [0x90, 0x01, 0x01, 0x98, 0x01, 0xFF, // 0x2C8
                 0x13, 0xA0, 0x01, 0xFF, 0x13]
 
             const cdn3Header = [0xAA, 0x01, 0xB2, 0x01]
-            const cdn3 = stringToHexArray(globalImageCdnKey)
+            const cdn3 = stringToHexArray(globalCdnKey)
 
             const randomId6 = [0xB0, 0x01, 0xF4, 0x0B]
             const randomId7 = [0xB8, 0x01, 0x68]
             const randomId8 = [0xC0, 0x01, 0x3A]
             const aesKey1Header = [0xCA, 0x01, 0x20]
-            const aesKey1 = stringToHexArray(globalAesKey1)
+            const aesKey1 = stringToHexArray(globalAesKey)
             const md5Header = [0xDA, 0x01, 0x20]
             const me5Key = stringToHexArray(globalMd5Key)
 
@@ -698,7 +696,7 @@ function attachProto() {
                 0xC8, 0x02, 0x00, 0x00 // 0x3E8
             ]
 
-            const finalPayload = type.concat(msgId, cpHeader, imageCp, randomId, sysHeader, sys, msgIdHeader, receiverMsgId,
+            const finalPayload = type.concat(msgId, cpHeader, fileCp, randomId, sysHeader, sys, msgIdHeader, receiverMsgId,
                 senderHeader, sender, receiverHeader, receiver, randomId1, type1, randomId2, randomId3, randomId4, htmlHeader, html,
                 cdnHeader, cdn, cdn2Header, cdn2, aesKeyHeader, aesKey, randomId5, cdn3Header, cdn3, randomId6, randomId7, randomId8,
                 aesKey1Header, aesKey1, md5Header, me5Key, randomId9, left0)
@@ -733,27 +731,27 @@ function attachProto() {
                 return
             }
 
-            const type = [0x0A, 0x40, 0x0A, 0x01, 0x00]
-            const msgId = [0x10, 0xC6, 0xBC, 0x90, 0xB9, 0x08] // 固定值，不是随机
+            const type = [0x0A, 0x3f, 0x0A, 0x01, 0x00]
+            const msgId = [0x10].concat(generateRandom5ByteVarint())
             const cpHeader = [0x1A, 0x10]
 
-            const imageCp = [0x6D, 0x64, 0x34, 0x34, 0x36, 0x34, 0x65, 0x34, 0x37, 0x36, 0x34, 0x65, 0x61, 0x61, 0x62, 0x62]
             const randomId = [0x20, 0xAF, 0xAC, 0x90, 0x93, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01]
             const sysHeader = [0x2A, 0x15]
             // UnifiedPCMac 26 arm64
-            const sys = [0x55, 0x6E, 0x69, 0x66, 0x69, 0x65, 0x64, 0x50, 0x43, 0x4D, 0x61, 0x63, 0x20, 0x32, 0x36, 0x20, 0x61, 0x72, 0x6D, 0x36, 0x34, 0x30]
+            const sys = [0x55, 0x6E, 0x69, 0x66, 0x69, 0x65, 0x64, 0x50, 0x43, 0x4D, 0x61, 0x63, 0x20, 0x32, 0x36, 0x20, 0x61, 0x72, 0x6D, 0x36, 0x34]
 
             // 注意：这里 sender 和 receiver 互换了
-            // wxid_7wd1ece99f7i21_1773385631_13_xwechat_2 只需要改这个时间戳就能重复发送
-            const receiverMsgId = stringToHexArray("wxid_7wd1ece99f7i21_1773386731_13_xwechat_2")
+            const receiverMsgId = stringToHexArray(receiverGlobal).concat([0x5F])
+                .concat(stringToHexArray(Math.floor(Date.now() / 1000).toString()))
+                .concat([0x5F, 0x31, 0x36, 0x30, 0x5F, 0x78, 0x77, 0x65, 0x63, 0x68, 0x61, 0x74, 0x5F, 0x31]);
 
             // 0x81, 0x01 是 tag，0x12, 0x2b 是长度=43
-            const msgIdHeader = [0x80, 0x01, 0x12, receiverMsgId.length]
+            const msgIdHeader = [0x30, 0x76, 0x12, receiverMsgId.length]
 
-            const senderHeader = [0x1A, 0x13];
+            const senderHeader = [0x1A, senderGlobal.length];
             // sender 和 receiver 互换了，sender 是 wxid_ldftuhe36izg19
             const sender = stringToHexArray(senderGlobal);
-            const receiverHeader = [0x22, 0x13]
+            const receiverHeader = [0x22, receiverGlobal.length]
             // receiver 是 wxid_7wd1ece99f7i21
             const receiver = stringToHexArray(receiverGlobal)
 
@@ -766,26 +764,26 @@ function attachProto() {
 
             const html = [0x3C, 0x6D, 0x73, 0x67, 0x73, 0x6F, 0x75, 0x72, 0x63, 0x65,
                 0x3E, 0x3C, 0x61, 0x6C, 0x6E, 0x6F, 0x64, 0x65, 0x3E, 0x3C, 0x66, 0x72,
-                0x3E, 0x31, 0x3C, 0x2F, 0x66, 0x72, 0x3E, 0x3C, 0x63, 0x66, 0x3E, 0x32,
+                0x3E, 0x31, 0x3C, 0x2F, 0x66, 0x72, 0x3E, 0x3C, 0x63, 0x66, 0x3E, 0x33,
                 0x3C, 0x2F, 0x63, 0x66, 0x3E, 0x3C, 0x2F, 0x61, 0x6C, 0x6E, 0x6F, 0x64,
                 0x65, 0x3E, 0x3C, 0x2F, 0x6D, 0x73, 0x67, 0x73, 0x6F, 0x75, 0x72, 0x63,
                 0x65, 0x3E]
 
             const cdnHeader = [0x82, 0x01, 0xb2, 0x01]
             // 3057 开头的cdn key
-            const cdn = stringToHexArray(globalImageCdnKey);
+            const cdn = stringToHexArray(globalCdnKey);
 
             const aesKeyHeader = [0x8A, 0x01, 0x20]
-            const aesKey = stringToHexArray(globalAesKey1)
+            const aesKey = stringToHexArray(globalAesKey)
 
             const randomId5 = [0x90, 0x01, 0x01, 0x9A, 0x01, 0xB2, 0x01]
 
-            const cdn2 = stringToHexArray(globalImageCdnKey)
+            const cdn2 = stringToHexArray(globalCdnKey)
 
             const randomId6 = [0xA0, 0x01, 0xAC, 0x73, 0xA8, 0x01, 0xE8, 0x02, 0xB0, 0x01, 0xCB, 0x01]
 
             const aesKey1Header = [0xBA, 0x01, 0x20]
-            const aesKey1 = stringToHexArray(globalAesKey1)
+            const aesKey1 = stringToHexArray(globalAesKey)
 
             const md5Header = [0xd2, 0x01, 0x20]
             const md5Key = stringToHexArray(globalMd5Key)
@@ -799,17 +797,17 @@ function attachProto() {
             const md5Key2 = stringToHexArray(globalMd5Key)
 
             const cdn3Header = [0x8A, 0x03, 0xB2, 0x01]
-            const cdn3 = stringToHexArray(globalImageCdnKey)
+            const cdn3 = stringToHexArray(globalCdnKey)
 
             const randomId8 = [0x92, 0x03, 0x20]
 
-            const md5Key3 = stringToHexArray(globalAesKey1)
+            const md5Key3 = stringToHexArray(globalAesKey)
 
             var left0 = [
                 0x98, 0x03, 0xe8, 0xf2, 0x6f
             ]
 
-            const finalPayload = type.concat(msgId, cpHeader, imageCp, randomId, sysHeader, sys, msgIdHeader, receiverMsgId,
+            const finalPayload = type.concat(msgId, cpHeader, fileCp, randomId, sysHeader, sys, msgIdHeader, receiverMsgId,
                 senderHeader, sender, receiverHeader, receiver, randomId1, type1, randomId2, randomId3, randomId4, htmlHeader, html,
                 cdnHeader, cdn, aesKeyHeader, aesKey, randomId5, cdn2, randomId6, aesKey1Header, aesKey1, md5Header, md5Key, md5Header1,
                 md5Key1, randomId7, md5Key2Header, md5Key2, cdn3Header, cdn3, randomId8, md5Key3, left0)
@@ -969,7 +967,7 @@ function triggerUploadVideo(receiver, md5, videoPath) {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, // 0x40
+        0x01, 0x00, 0x00, 0x00, 0x0B, 0x00, 0x00, 0x00, // 0x40
         0xD0, 0x72, 0x20, 0x89, 0x0B, 0x00, 0x00, 0x00, // 图片id // 0x48
         0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x50
         0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
@@ -980,7 +978,7 @@ function triggerUploadVideo(receiver, md5, videoPath) {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x88
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x01, 0xAA, 0xAA, 0xAA, 0x01, 0x00, 0x00, 0x00, // 0x98
+        0x01, 0xAA, 0xAA, 0xAA, 0x04, 0x00, 0x00, 0x00, // 0x98
         0x00, 0x00, 0x00, 0x00, 0xAA, 0xAA, 0xAA, 0xAA, // 0xa0
         0xA0, 0xBE, 0x2D, 0x8C, 0x0B, 0x00, 0x00, 0x00, // 0xa8
         0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0xb0
@@ -1006,7 +1004,7 @@ function triggerUploadVideo(receiver, md5, videoPath) {
         0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // 0x150
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x158
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x160
-        0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, // 0x168
+        0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0xE0, 0x03, // 0x168
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x170
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x178
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x180
@@ -1089,7 +1087,7 @@ function attachUploadMedia() {
                 type: "upload",
                 self_id: selfId,
             })
-            console.log("UploadMedia x0: " + uploadGlobalX0 + " imagePath: " + imagePath + " selfId: " + selfId);
+            console.log("UploadMedia x0: " + uploadGlobalX0 + " filePath: " + imagePath + " selfId: " + selfId);
         }
     })
 }
@@ -1105,23 +1103,24 @@ function patchCdnOnComplete() {
                 const currentFileId = x2.add(0x20).readPointer().readUtf8String();
                 const imageFileId = imageIdAddr.readUtf8String();
                 const videoFileId = videoIdAddr.readUtf8String()
-                if (currentFileId !== imageFileId && currentFileId !== videoFileId ) {
-                    console.log("[-] CndOnComplete x2: " + x2 + " currentFileId: " + currentFileId + " fileId: " + fileId);
+                if (currentFileId !== imageFileId && currentFileId !== videoFileId) {
+                    console.log("[-] CndOnComplete x2: " + x2 + " currentFileId: " + currentFileId +
+                        " imageFileId: " + imageFileId + " videoFileId:" + videoFileId);
                     return
                 }
 
-                globalImageCdnKey = x2.add(0x60).readPointer().readUtf8String();
-                globalAesKey1 = x2.add(0x78).readPointer().readUtf8String();
+                globalCdnKey = x2.add(0x60).readPointer().readUtf8String();
+                globalAesKey = x2.add(0x78).readPointer().readUtf8String();
                 globalMd5Key = x2.add(0x90).readPointer().readUtf8String();
                 videoIdentity = x2.add(0xf0).readPointer().readUtf8String();
                 const targetId = x2.add(0x40).readUtf8String();
-                console.log("X2" + x2 + "[+] globalImageCdnKey: " + globalImageCdnKey + " globalAesKey1: " + globalAesKey1 +
+                console.log("X2: " + x2 + "[+] globalCdnKey: " + globalCdnKey + " globalAesKey: " + globalAesKey +
                     " globalMd5Key: " + globalMd5Key + " videoIdentity:" + videoIdentity);
                 send({
                     type: "finish",
                 })
 
-                if (globalImageCdnKey !== "" && globalImageCdnKey != null && globalAesKey1 !== "" && globalAesKey1 != null &&
+                if (globalCdnKey !== "" && globalCdnKey != null && globalAesKey !== "" && globalAesKey != null &&
                     globalMd5Key !== "" && globalMd5Key != null) {
                     send({
                         type: "upload_finish",
@@ -1145,7 +1144,7 @@ function attachGetCallbackFromWrapper() {
             const tmpFileId = this.context.x1.readPointer().readUtf8String();
             const imageFileId = imageIdAddr.readUtf8String();
             const videoFileId = videoIdAddr.readUtf8String()
-            if (tmpFileId !== imageFileId && tmpFileId !== videoFileId ) {
+            if (tmpFileId !== imageFileId && tmpFileId !== videoFileId) {
                 console.log("[+] GetCallbackFromWrapper tmpFileId: " + tmpFileId + " imageFileId: " + imageFileId + " videoFileId:" + videoFileId);
                 return
             }
@@ -1161,7 +1160,7 @@ function attachGetCallbackFromWrapper() {
             const tmpFileId = this.context.x1.readPointer().readUtf8String();
             const imageFileId = imageIdAddr.readUtf8String();
             const videoFileId = videoIdAddr.readUtf8String()
-            if (tmpFileId !== imageFileId && tmpFileId !== videoFileId ) {
+            if (tmpFileId !== imageFileId && tmpFileId !== videoFileId) {
                 console.log("[+] OnComplete tmpFileId: " + tmpFileId + " imageFileId: " + imageFileId + " videoFileId:" + videoFileId);
                 return
             }

@@ -48,7 +48,7 @@ func sendHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			
-		} else if v.Type == "image" {
+		} else if v.Type == "image" || v.Type == "video" {
 			msgChan <- &SendMsg{
 				UserId:  req.UserID,
 				GroupID: req.GroupID,
