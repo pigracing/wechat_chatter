@@ -37,6 +37,9 @@ func main() {
 	
 	go func() {
 		<-stop
+		fridaScript.Clean()
+		session.Clean()
+		device.Clean()
 		Fatal("正在释放 Frida 资源并退出...")
 	}()
 	
@@ -75,9 +78,10 @@ func initFlag() {
 }
 
 func initFridaGadget() {
+	var err error
 	mgr := frida.NewDeviceManager()
 	// 连接到 Gadget 默认端口
-	device, err := mgr.AddRemoteDevice(config.FridaGadgetAddr, frida.NewRemoteDeviceOptions())
+	device, err = mgr.AddRemoteDevice(config.FridaGadgetAddr, frida.NewRemoteDeviceOptions())
 	if err != nil {
 		Fatal("❌ 无法连接 Gadget", err)
 	}
@@ -92,11 +96,12 @@ func initFridaGadget() {
 }
 
 func initFrida() {
+	var err error
 	// 1. 获取本地设备管理器
 	mgr := frida.NewDeviceManager()
 	
 	// 2. 枚举并获取本地设备 (TypeLocal)
-	device, err := mgr.DeviceByType(frida.DeviceTypeLocal)
+	device, err = mgr.DeviceByType(frida.DeviceTypeLocal)
 	if err != nil {
 		Fatal("无法获取本地设备", "err", err)
 	}
@@ -222,11 +227,9 @@ func loadJs() {
 				}
 			}
 		case "log":
-			// 这里处理 console.log
 			Info("[JS日志]", "payload", msg["payload"])
 		case "error":
-			// 这里处理 JS 脚本报错
-			Error("[JS日志报错]", "err", msg["description"])
+			Error("[JS日志报错]", "err", msg["description"], "stack", msg["stack"])
 		}
 	})
 	

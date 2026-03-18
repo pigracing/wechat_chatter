@@ -25,6 +25,7 @@ func SendWorker() {
 			Info("收到完成信号")
 		case m, ok := <-msgChan:
 			if !ok {
+				Fatal("发送通道关闭")
 				return
 			}
 			SendWechatMsg(m)
@@ -35,7 +36,7 @@ func SendWorker() {
 func SendWechatMsg(m *SendMsg) {
 	time.Sleep(time.Duration(config.SendInterval) * time.Millisecond)
 	currTaskId := atomic.AddInt64(&taskId, 1)
-	Info("📩 收到任务", "task_id", currTaskId)
+	Info("📩 收到任务", "task_id", currTaskId, "", m.)
 	
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -54,6 +55,10 @@ func SendWechatMsg(m *SendMsg) {
 	case "text":
 		result := fridaScript.ExportsCall("triggerSendTextMessage", currTaskId, targetId, m.Content, m.AtUser)
 		Info("📩 发送文本任务执行结果", "result", result, "task_id", currTaskId, "target_id", targetId, "at_user", m.AtUser)
+		if result != "1" {
+			Error("发送文本失败", "task_id", currTaskId, "target_id", targetId, "result", result)
+			return
+		}
 	case "image":
 		targetPath, md5Str, err := SaveBase64Image(m.Content)
 		if err != nil {
@@ -63,9 +68,17 @@ func SendWechatMsg(m *SendMsg) {
 		
 		result := fridaScript.ExportsCall("triggerUploadImg", targetId, md5Str, targetPath)
 		Info("📩 上传图片任务执行结果", "result", result, "target_id", targetId, "md5", md5Str, "path", targetPath)
+		if result != "0" {
+			Error("上传图片失败", "target_id", targetId, "md5", md5Str, "result", result)
+			return
+		}
 	case "send_image":
 		result := fridaScript.ExportsCall("triggerSendImgMessage", currTaskId, myWechatId, targetId)
 		Info("📩 发送图片任务执行结果", "result", result, "task_id", currTaskId, "wechat_id", myWechatId, "target_id", targetId)
+		if result != "1" {
+			Error("上传图片失败", "task_id", currTaskId, "target_id", targetId, "result", result)
+			return
+		}
 	case "video":
 		targetPath, md5Str, err := SaveBase64Image(m.Content)
 		if err != nil {
@@ -75,9 +88,17 @@ func SendWechatMsg(m *SendMsg) {
 		
 		result := fridaScript.ExportsCall("triggerUploadVideo", targetId, md5Str, targetPath)
 		Info("📩 上传视频任务执行结果", "result", result, "target_id", targetId, "md5", md5Str, "path", targetPath)
+		if result != "0" {
+			Error("上传视频失败", "target_id", targetId, "md5", md5Str, "result", result)
+			return
+		}
 	case "send_video":
 		result := fridaScript.ExportsCall("triggerSendVideoMessage", currTaskId, myWechatId, targetId)
 		Info("📩 发送视频任务执行结果", "result", result, "task_id", currTaskId, "wechat_id", myWechatId, "target_id", targetId)
+		if result != "1" {
+			Error("上传图片失败", "task_id", currTaskId, "target_id", targetId, "result", result)
+			return
+		}
 	case "download":
 		result := fridaScript.ExportsCall("triggerDownload", targetId, m.FIleCdnUrl, m.AesKey, m.FilePath, m.FileType)
 		Info("📩 下载任务执行结果", "result", result, "task_id", currTaskId, "wechat_id", myWechatId, "target_id", targetId)

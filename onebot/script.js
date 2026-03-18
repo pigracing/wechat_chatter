@@ -303,9 +303,9 @@ var videoProtobufDeleteAddr = videoCallbackFuncAddr.add(0x6c);
 var videoProtobufDeleteAddrByte;
 
 var uploadImageAddr = baseAddr.add({{.uploadImageAddr}});
-var CndOnCompleteAddr = baseAddr.add({{.CndOnCompleteAddr}});
-var imgMessageCallbackFunc1 = baseAddr.add({{.imgMessageCallbackFunc1}});
-var videoMessageCallbackFunc1 = baseAddr.add({{.videoMessageCallbackFunc1}});
+var cndOnCompleteAddr = baseAddr.add({{.cndOnCompleteAddr}});
+var imgMessageCallbackFunc = baseAddr.add({{.imgMessageCallbackFunc}});
+var videoMessageCallbackFunc = baseAddr.add({{.videoMessageCallbackFunc}});
 
 var uploadGetCallbackWrapperAddr = baseAddr.add({{.uploadGetCallbackWrapperAddr}});
 var uploadGetCallbackWrapperFuncAddr = baseAddr.add({{.uploadGetCallbackWrapperFuncAddr}});
@@ -570,9 +570,7 @@ function triggerSendTextMessage(taskId, receiver, content, atUser) {
 
     // 5. 调用函数
     try {
-        const result = MMStartTask(triggerX0, triggerX1Payload);
-        console.log(`[+] Execution MMStartTask ${sendFuncAddr} with args: (${triggerX0}) (${triggerX1Payload})  Success. Return value: ` + result);
-        return "ok";
+        return MMStartTask(triggerX0, triggerX1Payload);
     } catch (e) {
         console.error(`[!] Error trigger  MMStartTask ${sendFuncAddr} with args: (${triggerX0}) (${triggerX1Payload}),   during execution: ` + e);
         return "fail";
@@ -753,7 +751,7 @@ function setupSendImgMessageDynamic() {
     sendImgMessageAddr.add(0x20).writeU32(taskIdGlobal);
     sendImgMessageAddr.add(0x28).writePointer(imgMessageAddr);
 
-    imgMessageAddr.add(0x00).writePointer(imgMessageCallbackFunc1);
+    imgMessageAddr.add(0x00).writePointer(imgMessageCallbackFunc);
     imgMessageAddr.add(0x08).writeU32(taskIdGlobal);
     imgMessageAddr.add(0x0c).writeU32(0x6e);
     imgMessageAddr.add(0x10).writeU64(0x3);
@@ -784,7 +782,7 @@ function setupSendImgMessageDynamic() {
     sendVideoMessageAddr.add(0x20).writeU32(taskIdGlobal);
     sendVideoMessageAddr.add(0x28).writePointer(videoMessageAddr);
 
-    videoMessageAddr.add(0x00).writePointer(videoMessageCallbackFunc1);
+    videoMessageAddr.add(0x00).writePointer(videoMessageCallbackFunc);
     videoMessageAddr.add(0x08).writeU32(taskIdGlobal);
     videoMessageAddr.add(0x0c).writeU32(0x6e);
     videoMessageAddr.add(0x10).writeU64(0x3);
@@ -982,9 +980,7 @@ function triggerSendImgMessage(taskId, sender, receiver) {
 
     // 5. 调用函数
     try {
-        const result = MMStartTask(triggerX0, triggerX1Payload);
-        console.log(`[+] Execution StartTask ${sendFuncAddr} with args: (${triggerX0}) (${triggerX1Payload})  Success. Return value: ` + result);
-        return "ok";
+        return MMStartTask(triggerX0, triggerX1Payload);
     } catch (e) {
         console.error(`[!] Error trigger StartTask ${sendFuncAddr} with args: (${triggerX0}) (${triggerX1Payload}),   during execution: ` + e);
         return "fail";
@@ -1074,9 +1070,7 @@ function triggerSendVideoMessage(taskId, sender, receiver) {
 
     // 5. 调用函数
     try {
-        const result = MMStartTask(triggerX0, triggerX1Payload);
-        console.log(`[+] Execution StartTask ${sendFuncAddr} with args: (${triggerX0}) (${triggerX1Payload})  Success. Return value: ` + result);
-        return "ok";
+        return MMStartTask(triggerX0, triggerX1Payload);
     } catch (e) {
         console.error(`[!] Error trigger StartTask ${sendFuncAddr} with args: (${triggerX0}) (${triggerX1Payload}),   during execution: ` + e);
         return "fail";
@@ -1434,8 +1428,7 @@ function triggerUploadImg(receiver, md5, imagePath) {
     const startUploadMedia = new NativeFunction(uploadImageAddr, 'int64', ['pointer', 'pointer']);
 
     console.log(`开始手动触发 C2C 上传 X0 ${uploadGlobalX0}, X1: ${uploadImageX1}`);
-    const result = startUploadMedia(uploadGlobalX0, uploadImageX1);
-    console.log("调用结果: " + result);
+    return startUploadMedia(uploadGlobalX0, uploadImageX1);
 }
 
 function triggerUploadVideo(receiver, md5, videoPath) {
@@ -1554,8 +1547,7 @@ function triggerUploadVideo(receiver, md5, videoPath) {
 
     const startUploadMedia = new NativeFunction(uploadImageAddr, 'int64', ['pointer', 'pointer']);
 
-    const result = startUploadMedia(uploadGlobalX0, uploadVideoX1);
-    console.log("调用结果: " + result);
+    return startUploadMedia(uploadGlobalX0, uploadVideoX1);
 }
 
 function attachUploadMedia() {
@@ -1577,7 +1569,7 @@ setImmediate(attachUploadMedia);
 
 
 function patchCdnOnComplete() {
-    Interceptor.attach(CndOnCompleteAddr, {
+    Interceptor.attach(cndOnCompleteAddr, {
         onEnter: function (args) {
 
             try {
@@ -2041,10 +2033,7 @@ function triggerDownload(receiver, cdnUrl, aesKey, filePath, fileType) {
     downloadFileX1.add(0xa0).writeU32(fileType);
 
     const startDwMedia = new NativeFunction(startDownloadMedia, 'int64', ['pointer', 'pointer']);
-    const result = startDwMedia(downloadGlobalX0, downloadFileX1);
-
-    console.log("下载调用结果: " + result);
-    return result;
+    return startDwMedia(downloadGlobalX0, downloadFileX1);
 }
 
 function getMessages(content, sender, mediaContent) {
@@ -2076,6 +2065,8 @@ function getMessages(content, sender, mediaContent) {
                 messages.push({type: "face", data: {text: part}});
             } else if (part.startsWith("<?xml version=\"1.0\"?><msg><videomsg")) {
                 messages.push({type: "video", data: {text: part}});
+            } else if (part.startsWith("<sysmsg") || part.startsWith("<?xml version=\"1.0\"?><sysmsg")) {
+                messages.push({type: "sys", data: {text: part}});
             } else {
                 messages.push({type: "text", data: {text: part}});
             }
@@ -2106,6 +2097,8 @@ function getMessages(content, sender, mediaContent) {
             messages.push({type: "face", data: {text: content}});
         } else if (content.startsWith("<?xml version=\"1.0\"?><msg><videomsg")) {
             messages.push({type: "video", data: {text: content}});
+        } else if (content.startsWith("<sysmsg") || content.startsWith("<?xml version=\"1.0\"?><sysmsg")) {
+            messages.push({type: "sys", data: {text: content}});
         } else {
             messages.push({type: "text", data: {text: content}});
         }

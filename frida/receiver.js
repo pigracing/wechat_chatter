@@ -39,12 +39,6 @@ function setReceiver() {
             }
 
             const x2 = this.context.x2.toInt32();
-            console.log(" [+] currentPtr: ", hexdump(currentPtr, {
-                offset: 0,
-                length: x2,
-                header: true,
-                ansi: true
-            }));
             const fields = getProtobufRawBytes(currentPtr, x2)
 
             const sender = fields[0]
@@ -57,13 +51,15 @@ function setReceiver() {
 
             if (typeof sender !== "string" || sender === "" || typeof receiver !== "string" || receiver === "" ||
                 typeof content !== "string"  || content === "" || typeof msgId !== "string"  || msgId === "") {
-                console.log("字段缺失，无法解析 sender:" + sender + " receiver:" + receiver + hexdump(currentPtr, {
-                    length: x2,
-                    header: true,
-                    ansi: true,
-                }))
                 return;
             }
+
+            console.log(" [+] currentPtr: ", hexdump(currentPtr, {
+                offset: 0,
+                length: x2,
+                header: true,
+                ansi: true
+            }));
 
             var selfId = receiver
             var msgType = "private"
@@ -202,12 +198,12 @@ function setReceiver() {
                 var buffer = dataPtr.readByteArray(dataLen);
                 var uint8Array = new Uint8Array(buffer);
 
-                send({
-                    type: "download",
-                    media: Array.from(uint8Array),
-                    file_id: fileId,
-                    cdn_url: cdnUrl,
-                })
+                // send({
+                //     type: "download",
+                //     media: Array.from(uint8Array),
+                //     file_id: fileId,
+                //     cdn_url: cdnUrl,
+                // })
             }
         }
     });
@@ -246,7 +242,9 @@ function getMessages(content, sender, mediaContent) {
                 messages.push({type: "face", data: {text: part}});
             } else if (part.startsWith("<?xml version=\"1.0\"?><msg><videomsg")) {
                 messages.push({type: "video", data: {text: part}});
-            } else {
+            } else if (part.startsWith("<sysmsg") || part.startsWith("<?xml version=\"1.0\"?><sysmsg")) {
+                messages.push({type: "sys", data: {text: part}});
+            }  else {
                 messages.push({type: "text", data: {text: part}});
             }
         }
@@ -276,6 +274,8 @@ function getMessages(content, sender, mediaContent) {
             messages.push({type: "face", data: {text: content}});
         } else if (content.startsWith("<?xml version=\"1.0\"?><msg><videomsg")) {
             messages.push({type: "video", data: {text: content}});
+        } else if (content.startsWith("<sysmsg") || content.startsWith("<?xml version=\"1.0\"?><sysmsg")) {
+            messages.push({type: "sys", data: {text: content}});
         } else {
             messages.push({type: "text", data: {text: content}});
         }

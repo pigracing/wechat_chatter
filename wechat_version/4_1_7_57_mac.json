@@ -5,9 +5,9 @@
   "req2bufEnterAddr": "0x36FC204",
   "req2bufExitAddr": "0x36FD3DC",
   "imageCallbackFuncAddr": "0x245D110",
-  "imgMessageCallbackFunc1": "0x8790DD8",
+  "imgMessageCallbackFunc": "0x8790DD8",
   "uploadImageAddr": "0x49459C8",
-  "CndOnCompleteAddr": "0x36BAFC0",
+  "cndOnCompleteAddr": "0x36BAFC0",
   "buf2RespAddr": "0x3721FA0",
   "uploadGetCallbackWrapperAddr": "0x491348C",
   "uploadGetCallbackWrapperFuncAddr": "0x36BA7DC",
@@ -18,5 +18,5 @@
   "downloadFileAddr": "0x4A084EC",
   "downloadVideoAddr": "0x4A2A268",
   "videoCallbackFuncAddr": "0x24C76C8",
-  "videoMessageCallbackFunc1": "0x8793B78"
+  "videoMessageCallbackFunc": "0x8793B78"
 }

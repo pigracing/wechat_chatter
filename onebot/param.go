@@ -11,6 +11,7 @@ import (
 var (
 	fridaScript *frida.Script
 	session     *frida.Session
+	device      frida.DeviceInt
 	taskId      = int64(0x20000000)
 	myWechatId  = ""
 	

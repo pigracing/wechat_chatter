@@ -25,7 +25,7 @@ function scanPatterns() {
 // 特征码数组：? 代表通配符，空格可选
 const myPatterns = [
     {
-        name: "CndOnCompleteAddr",
+        name: "cndOnCompleteAddr",
         pattern: "08 19 40 F9 E1 03 14 AA E2 03 15 AA 00 01 3F D6"
     },
     {
@@ -59,6 +59,10 @@ const myPatterns = [
     {
         name: "startDownloadMedia",
         pattern: "B6 E3 02 D1 68 E1 01 D0 08 71 44 F9 08 01 40 F9 A8 83 1C F8 28 7C 42 39 09 1D 00 13 2A 48 40 F9 3F 01 00 71 48 B1 88 9A"
+    },
+    {
+        name: "downloadVideoAddr",
+        pattern: "E0 03 07 91 01 00 80 52 45 C1 80 52 06 00 80 52 07 00 80 D2"
     }
 ];
 
