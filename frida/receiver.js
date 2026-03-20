@@ -1,19 +1,14 @@
-var baseAddr = ptr(0);
-Process.enumerateModules().forEach(function (m) {
-    if (m.name.toLowerCase().includes("wechat.dylib")) {
-        baseAddr = m.base;
-    }
-});
-
-if (baseAddr === 0x0) {
-    console.log("wechat.dylib not found");
+var moduleName = "wechat.dylib";
+var baseAddr = Process.findModuleByName(moduleName).base;
+if (!baseAddr) {
+    console.error("[!] 找不到 WeChat 模块基址，请检查进程名。");
 }
-console.log("baseAddr: " + baseAddr);
+console.log("[+] WeChat base address: " + baseAddr);
 
-var buf2RespAddr = baseAddr.add(0x382c1b4)
-var downloadImagAddr = baseAddr.add(0x4bf8608) // image_download
-var downloadFileAddr = baseAddr.add(0x4B97384) // c2c_download
-var downloadVideoAddr = baseAddr.add(0x4bb9100) // hdvideo_streaming
+var buf2RespAddr = baseAddr.add(0x382C1A8)
+var downloadImagAddr = baseAddr.add(0x4BF85F0) // image_download
+var downloadFileAddr = baseAddr.add(0x4B97378) // c2c_download
+var downloadVideoAddr = baseAddr.add(0x4bb90fc) // hdvideo_streaming
 var startDownloadMedia = baseAddr.add(0x4AD54D4)
 
 var downloadGlobalX0;
@@ -40,12 +35,12 @@ setImmediate(setupDownloadFileDynamic)
 function setReceiver() {
     Interceptor.attach(buf2RespAddr, {
         onEnter: function (args) {
-            const currentPtr = this.context.x1;
+            const currentPtr = this.context.x20;
             if (currentPtr.add(0).readU8() !== 0x08) {
                 return
             }
 
-            const x2 = this.context.x2.toInt32();
+            const x2 = this.context.x0.toInt32();
             const fields = getProtobufRawBytes(currentPtr, x2)
 
             const sender = fields[0]
@@ -154,8 +149,8 @@ function setReceiver() {
 
     Interceptor.attach(downloadFileAddr, {
         onEnter: function (args) {
-            var dataPtr = this.context.x1;
-            var dataLen = this.context.x2.toInt32();
+            var dataPtr = this.context.x22;
+            var dataLen = this.context.x0.toInt32();
             var fileId = this.context.sp.add(0x30).readPointer().readUtf8String();
             var cdnUrl = this.context.x19.add(0x2F8).readPointer().readUtf8String();
 
@@ -170,7 +165,7 @@ function setReceiver() {
 
     Interceptor.attach(downloadImagAddr, {
         onEnter: function (args) {
-            var dataPtr = this.context.x1;
+            var dataPtr = this.context.x22;
             var dataLen = this.context.x2.toInt32();
             var fileId = this.context.x19.add(0x2E0).readPointer().readUtf8String();
             var cdnUrl = this.context.x19.add(0x2F8).readPointer().readUtf8String();
@@ -187,7 +182,7 @@ function setReceiver() {
     Interceptor.attach(downloadVideoAddr, {
         onEnter: function (args) {
             var dataPtr = this.context.x1;
-            var dataLen = this.context.x2.toInt32();
+            var dataLen = this.context.x24.toInt32();
             var fileId = this.context.x22.add(0x40).readPointer().readUtf8String();
             var cdnUrl = this.context.x22.add(0x58).readPointer().readUtf8String();
 

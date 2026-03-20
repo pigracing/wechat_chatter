@@ -1,19 +1,19 @@
-let module;
-Process.enumerateModules().forEach(function (m) {
-    if (m.name.toLowerCase().includes("wechat.dylib")) {
-        module = m;
-    }
-});
-console.log("module:", module.name, module.base, module.size);
+var moduleName = "wechat.dylib";
+var module = Process.findModuleByName(moduleName);
+var baseAddr = module.base;
+if (!baseAddr) {
+    console.error("[!] 找不到 WeChat 模块基址，请检查进程名。");
+}
+console.log("[+] WeChat base address: " + baseAddr);
 
 function scanPatterns() {
     myPatterns.forEach((item, index) => {
         const { name, pattern } = item;
 
-        Memory.scan(module.base, module.size, pattern, {
+        Memory.scan(baseAddr, module.size, pattern, {
             onMatch: function(address, size) {
                 // 计算相对偏移 (RVA)
-                const offset = address.sub(module.base);
+                const offset = address.sub(baseAddr);
                 console.log(`"${name}": "${offset}", 绝对地址: ${address}`);
             },
             onError: function(reason) {

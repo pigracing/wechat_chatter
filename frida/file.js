@@ -1,16 +1,11 @@
 // 1. 获取微信主模块的基地址
-var baseAddr = ptr(0);
-Process.enumerateModules().forEach(function (m) {
-    if (m.name.toLowerCase().includes("wechat.dylib")) {
-        baseAddr = m.base;
-    }
-});
-
-if (baseAddr === 0x0) {
-    console.log("wechat.dylib not found");
+var moduleName = "wechat.dylib";
+var baseAddr = Process.findModuleByName(moduleName).base;
+if (!baseAddr) {
+    console.error("[!] 找不到 WeChat 模块基址，请检查进程名。");
 }
+console.log("[+] WeChat base address: " + baseAddr);
 
-console.log("baseAddr: " + baseAddr);
 
 // -------------------------基础函数分区-------------------------
 function toVarint(n) {
@@ -108,15 +103,15 @@ function generateBytes(n) {
 // 双方公共使用的地址
 var triggerX1Payload;
 var triggerX0;
-var req2bufEnterAddr = baseAddr.add(0x3806b30);
-var req2bufExitAddr = baseAddr.add(0x3807C48);
+var req2bufEnterAddr = baseAddr.add(`0x3806b30`);
+var req2bufExitAddr = baseAddr.add(0x3807C44);
 var sendFuncAddr = baseAddr.add(0x498D2E0);
 var insertMsgAddr = ptr(0);
 var sendMsgType = "";
 
 // 图片消息全局变量
 var imageCallbackFuncAddr = baseAddr.add(0x251AD40);
-var imgProtobufAddr = imageCallbackFuncAddr.add(0x54);
+var imgProtobufAddr = imageCallbackFuncAddr.add(0x50);
 var patchImgProtobufFunc1 = imageCallbackFuncAddr.add(0x10);
 var patchImgProtobufFunc1Byte;
 var patchImgProtobufFunc2 = imageCallbackFuncAddr.add(0x30);
@@ -126,7 +121,7 @@ var imgProtobufDeleteAddrByte;
 
 // 视频消息全局变量
 var videoCallbackFuncAddr = baseAddr.add(0x2587FD0);
-var videoProtobufAddr = videoCallbackFuncAddr.add(0x54);
+var videoProtobufAddr = videoCallbackFuncAddr.add(0x50);
 var patchVideoProtobufFunc1 = videoCallbackFuncAddr.add(0x10);
 var patchVideoProtobufFunc1Byte;
 var patchVideoProtobufFunc2 = videoCallbackFuncAddr.add(0x30);
@@ -138,6 +133,11 @@ var uploadImageAddr = baseAddr.add(0x4ad4860);
 var cndOnCompleteAddr = baseAddr.add(0x37C40E0);
 var imgMessageCallbackFunc1 = baseAddr.add(0x89159F0);
 var videoMessageCallbackFunc1 = baseAddr.add(0x8918790);
+
+var uploadGetCallbackWrapperAddr = baseAddr.add(0x4aa2324);
+var uploadGetCallbackWrapperFuncAddr = baseAddr.add(0x37C392C);
+var uploadOnCompleteAddr = baseAddr.add(0x4AA2920);
+var uploadOnCompleteFuncAddr = baseAddr.add(0x37C4B10);
 
 var uploadImageX1 = ptr(0);
 var imgCgiAddr = ptr(0);
@@ -767,7 +767,11 @@ function attachProto() {
             }));
         },
     });
+}
 
+setImmediate(attachProto);
+
+function attachVideoProto() {
     Interceptor.attach(videoProtobufAddr, {
         onEnter: function (args) {
 
@@ -899,7 +903,7 @@ function attachProto() {
     });
 }
 
-setImmediate(attachProto);
+setImmediate(attachVideoProto());
 
 
 function triggerUploadImg(receiver, md5, imagePath) {
@@ -1242,7 +1246,7 @@ function patchCdnOnComplete() {
 setImmediate(patchCdnOnComplete)
 
 function attachGetCallbackFromWrapper() {
-    Interceptor.attach(baseAddr.add(0x4aa2324), {
+    Interceptor.attach(uploadGetCallbackWrapperAddr, {
         onEnter: function (args) {
             const tmpFileId = this.context.x1.readPointer().readUtf8String();
             const imageFileId = imageIdAddr.readUtf8String();
@@ -1252,13 +1256,13 @@ function attachGetCallbackFromWrapper() {
                 return
             }
 
-            uploadCallback.add(0x10).writePointer(baseAddr.add(0x37C392C));
+            uploadCallback.add(0x10).writePointer(uploadGetCallbackWrapperFuncAddr);
             this.context.x8 = uploadCallback;
             console.log("[+] GetCallbackFromWrapper x8: " + this.context.x8);
         }
     })
 
-    Interceptor.attach(baseAddr.add(0x4AA2920), {
+    Interceptor.attach(uploadOnCompleteAddr, {
         onEnter: function (args) {
             const tmpFileId = this.context.x1.readPointer().readUtf8String();
             const imageFileId = imageIdAddr.readUtf8String();
@@ -1268,7 +1272,7 @@ function attachGetCallbackFromWrapper() {
                 return
             }
 
-            uploadCallback.add(0x30).writePointer(baseAddr.add(0x37C4B10));
+            uploadCallback.add(0x30).writePointer(uploadOnCompleteFuncAddr);
             this.context.x8 = uploadCallback;
             console.log("[+] OnComplete x8: " + this.context.x8);
         }

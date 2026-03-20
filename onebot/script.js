@@ -1,5 +1,5 @@
-// 1. 获取微信主模块的基地址
-var baseAddr = Process.getModuleByName("WeChat").base;
+var moduleName = "wechat.dylib";
+var baseAddr = Process.findModuleByName(moduleName).base;
 if (!baseAddr) {
     console.error("[!] 找不到 WeChat 模块基址，请检查进程名。");
 }
@@ -260,7 +260,7 @@ function generateBytes(n) {
 // 文本消息全局变量
 // 文本消息全局变量
 var textCallbackFuncAddr = baseAddr.add({{.textCallbackFuncAddr}});
-var protobufAddr = textCallbackFuncAddr.add(0x44);
+var protobufAddr = textCallbackFuncAddr.add(0x40);
 var patchTextProtobufAddr = textCallbackFuncAddr.add(0x20);
 var patchTextProtobufByte
 var patchTextProtobufDeleteAddr = textCallbackFuncAddr.add(0x5C);
@@ -284,7 +284,7 @@ var buf2RespAddr = baseAddr.add({{.buf2RespAddr}});
 
 // 图片消息全局变量
 var imageCallbackFuncAddr = baseAddr.add({{.imageCallbackFuncAddr}});
-var imgProtobufAddr = imageCallbackFuncAddr.add(0x54);
+var imgProtobufAddr = imageCallbackFuncAddr.add(0x50);
 var patchImgProtobufFunc1 = imageCallbackFuncAddr.add(0x10);
 var patchImgProtobufFunc1Byte;
 var patchImgProtobufFunc2 = imageCallbackFuncAddr.add(0x30);
@@ -294,7 +294,7 @@ var imgProtobufDeleteAddrByte;
 
 // 视频消息全局变量
 var videoCallbackFuncAddr = baseAddr.add({{.videoCallbackFuncAddr}});
-var videoProtobufAddr = videoCallbackFuncAddr.add(0x54);
+var videoProtobufAddr = videoCallbackFuncAddr.add(0x50);
 var patchVideoProtobufFunc1 = videoCallbackFuncAddr.add(0x10);
 var patchVideoProtobufFunc1Byte;
 var patchVideoProtobufFunc2 = videoCallbackFuncAddr.add(0x30);
@@ -577,8 +577,8 @@ function triggerSendTextMessage(taskId, receiver, content, atUser) {
     }
 }
 
-function AttachSendTextProto() {
-    Interceptor.attach(sendFuncAddr, {
+function AttachSendFunc() {
+    Interceptor.attach(sendFuncAddr.add(0x10), {
         onEnter: function (args) {
 
             if (triggerX1Payload) {
@@ -592,7 +592,7 @@ function AttachSendTextProto() {
     })
 }
 
-setImmediate(AttachSendTextProto);
+setImmediate(AttachSendFunc);
 
 // 拦截 SendTextProto 编码逻辑，注入自定义 Payload
 function attachSendTextProto() {
@@ -1707,12 +1707,12 @@ setImmediate(setupDownloadFileDynamic)
 function setReceiver() {
     Interceptor.attach(buf2RespAddr, {
         onEnter: function (args) {
-            const currentPtr = this.context.x1;
+            const currentPtr = this.context.x20;
             if (currentPtr.add(0).readU8() !== 0x08) {
                 return
             }
 
-            const x2 = this.context.x2.toInt32();
+            const x2 = this.context.x0.toInt32();
             // console.log(" [+] currentPtr: ", hexdump(currentPtr, {
             //     offset: 0,
             //     length: x2,
@@ -1820,8 +1820,8 @@ function setReceiver() {
 
     Interceptor.attach(downloadFileAddr, {
         onEnter: function (args) {
-            var dataPtr = this.context.x1;
-            var dataLen = this.context.x2.toInt32();
+            var dataPtr = this.context.x22;
+            var dataLen = this.context.x20.toInt32();
             var fileId = this.context.sp.add(0x30).readPointer().readUtf8String();
             var cdnUrl = this.context.x19.add(0x2F8).readPointer().readUtf8String();
 
@@ -1841,7 +1841,7 @@ function setReceiver() {
 
     Interceptor.attach(downloadImagAddr, {
         onEnter: function (args) {
-            var dataPtr = this.context.x1;
+            var dataPtr = this.context.x22;
             var dataLen = this.context.x2.toInt32();
             var fileId = this.context.x19.add(0x2E0).readPointer().readUtf8String();
             var cdnUrl = this.context.x19.add(0x2F8).readPointer().readUtf8String();
@@ -1863,7 +1863,7 @@ function setReceiver() {
     Interceptor.attach(downloadVideoAddr, {
         onEnter: function (args) {
             var dataPtr = this.context.x1;
-            var dataLen = this.context.x2.toInt32();
+            var dataLen = this.context.x24.toInt32();
             var fileId = this.context.x22.add(0x40).readPointer().readUtf8String();
             var cdnUrl = this.context.x22.add(0x58).readPointer().readUtf8String();
 

@@ -1,15 +1,9 @@
-var baseAddr = ptr(0);
-Process.enumerateModules().forEach(function (m) {
-    if (m.name.toLowerCase().includes("wechat.dylib")) {
-        baseAddr = m.base;
-    }
-});
-
-if (baseAddr === 0x0) {
-    console.log("wechat.dylib not found");
+var moduleName = "wechat.dylib";
+var baseAddr = Process.findModuleByName(moduleName).base;
+if (!baseAddr) {
+    console.error("[!] 找不到 WeChat 模块基址，请检查进程名。");
 }
-console.log("baseAddr: " + baseAddr);
-
+console.log("[+] WeChat base address: " + baseAddr);
 
 // -------------------------基础函数分区-------------------------
 function toVarint(n) {
@@ -95,15 +89,15 @@ var textCgiAddr = ptr(0);
 var sendTextMessageAddr = ptr(0);
 var textMessageAddr = ptr(0);
 var textProtoX1PayloadAddr = ptr(0);
-var sendMessageCallbackFunc = ptr(0);
-var messageCallbackFunc1 = baseAddr.add(0x8915F28);
+
+var sendMessageCallbackFunc = baseAddr.add(0x8915F28);
 
 
 // 双方公共使用的地址
 var triggerX1Payload;
 var triggerX0;
 var req2bufEnterAddr = baseAddr.add(0x3806b30);
-var req2bufExitAddr = baseAddr.add(0x3807C48);
+var req2bufExitAddr = baseAddr.add(0x3807C44);
 var sendFuncAddr = baseAddr.add(0x498D2E0);
 var insertMsgAddr = ptr(0);
 var sendMsgType = "";
@@ -137,7 +131,7 @@ function setupSendTextMessageDynamic() {
     // B. 构建 sendTextMessageAddr 结构体 (X24 基址位置)
     sendTextMessageAddr.add(0x00).writeU64(0);
     sendTextMessageAddr.add(0x08).writeU64(0);
-    sendTextMessageAddr.add(0x10).writePointer(sendMessageCallbackFunc);
+    sendTextMessageAddr.add(0x10).writeU64(0);
     sendTextMessageAddr.add(0x18).writeU64(1);
     sendTextMessageAddr.add(0x20).writeU32(taskIdGlobal);
     sendTextMessageAddr.add(0x28).writePointer(textMessageAddr); // 指向动态分配的 Message
@@ -150,7 +144,7 @@ function setupSendTextMessageDynamic() {
     }));
 
     // C. 构建 Message 结构体
-    textMessageAddr.add(0x00).writePointer(messageCallbackFunc1);
+    textMessageAddr.add(0x00).writePointer(sendMessageCallbackFunc);
     textMessageAddr.add(0x08).writeU32(taskIdGlobal);
     textMessageAddr.add(0x0c).writeU32(0x20a);
     textMessageAddr.add(0x10).writeU64(0x3);
@@ -309,7 +303,7 @@ function triggerSendTextMessage(taskId, receiver, content, atUser) {
 }
 
 function AttachSendTextProto() {
-    Interceptor.attach(sendFuncAddr, {
+    Interceptor.attach(sendFuncAddr.add(0x10), {
         onEnter: function (args) {
             if (triggerX1Payload) {
                 return
